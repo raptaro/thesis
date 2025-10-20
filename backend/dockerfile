@@ -1,5 +1,5 @@
-# Stage 1: build wheels
-FROM python:3.13-slim AS builder
+# Stage 1: build wheels for web deps
+FROM python:3.13-slim-bullseye AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
@@ -8,12 +8,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /wheels
-COPY requirements.txt /wheels/requirements.txt
+COPY requirements-web.txt /wheels/requirements-web.txt
 
-RUN pip wheel --no-cache-dir --wheel-dir=/wheels -r /wheels/requirements.txt
+# Build wheels for web requirements
+RUN pip wheel --no-cache-dir --wheel-dir=/wheels -r /wheels/requirements-web.txt
 
-# Stage 2: runtime image
-FROM python:3.13-slim
+# Stage 2: runtime image for web
+FROM python:3.13-slim-bullseye
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
@@ -23,11 +24,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY --from=builder /wheels /wheels
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --no-index --find-links=/wheels -r /app/requirements.txt
+COPY requirements-web.txt /app/requirements-web.txt
 
+# Install only web wheels (no network)
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r /app/requirements-web.txt \
+ && rm -rf /wheels
+
+# Copy only the app code you need
 COPY manage.py /app/manage.py
-COPY backend /app/backend
+COPY backend/ /app/backend/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
